@@ -1,14 +1,14 @@
-name: Interactive VPS Build
+name: Interactive Shell
 
 on:
   workflow_dispatch:
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  interactive-shell:
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout Source Kernel
         uses: actions/checkout@v4
 
-      - name: Setup SSH Session (Tmate)
+      - name: Setup Interaktif Shell SSH
         uses: mxschmitt/action-tmate@v3
