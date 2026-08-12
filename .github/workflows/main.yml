@@ -1,1 +1,120 @@
 
+name: Build Kernel Floppy + XXKSU + DroidSpaces + NetHunter
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout kernel source
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          ref: floppy-1  # 👈 Gunakan cabang floppy-1
+
+      - name: Setup build environment
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git make bc bison flex libssl-dev libelf-dev python3 zip gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi patch
+
+      - name: Fix source patches
+        run: |
+          sed -i '1s/^/#include <asm\/setup.h>\n/' fs/proc/cmdline.c
+
+      - name: Download toolchain
+        run: |
+          mkdir -p ~/toolchain
+          git clone --depth=1 https://github.com/ZyCromerZ/Clang --single-branch ~/toolchain/clang
+
+      # 👇 KLON PATCH DARI GITLAB KALI NETHUNTER
+      - name: Clone Kali NetHunter kernel patches
+        run: |
+          git clone --depth=1 https://gitlab.com/kalilinux/nethunter/build-scripts/kali-nethunter-kernel-builder.git ~/nethunter-patches
+          ls -la ~/nethunter-patches/patches/4.14/
+
+      # 👇 TERAPKAN SEMUA PATCH KECUALI SAMSUNG
+      - name: Apply NetHunter patches (exclude Samsung)
+        run: |
+          cd ~/nethunter-patches/patches/4.14/
+          
+          # Dapatkan semua file .patch, kecuali yang mengandung kata "samsung" atau "oneui"
+          PATCH_FILES=$(ls *.patch | grep -viE 'samsung|oneui')
+          
+          for patch in $PATCH_FILES; do
+            echo "📌 Menerapkan patch: $patch"
+            patch -d $GITHUB_WORKSPACE -p1 < "$patch" || echo "⚠️ Patch $patch gagal, dilanjutkan"
+          done
+
+      - name: Build kernel
+        run: |
+          export PATH="$HOME/toolchain/clang/bin:$PATH"
+          export ARCH=arm64
+          export SUBARCH=arm64
+          export CROSS_COMPILE=aarch64-linux-gnu-
+          export CROSS_COMPILE_ARM32=arm-linux-gnueabi-
+          mkdir -p out
+          
+          # 👇 Gunakan defconfig dasar
+          make O=out ARCH=arm64 ginkgo_stock_defconfig
+          
+          # 👇 TAMBAHKAN XXKSU (bukan KSU biasa)
+          if [ -f arch/arm64/configs/xxksu.config ]; then
+            echo "📌 Menambahkan XXKSU config"
+            cat arch/arm64/configs/xxksu.config >> out/.config
+          else
+            echo "⚠️ File xxksu.config tidak ditemukan"
+          fi
+          
+          # 👇 TAMBAHKAN DroidSpaces
+          if [ -f arch/arm64/configs/droidspaces_config ]; then
+            echo "📌 Menambahkan DroidSpaces config"
+            cat arch/arm64/configs/droidspaces_config >> out/.config
+          else
+            echo "⚠️ File droidspaces_config tidak ditemukan"
+          fi
+          
+          # 👇 OPSI NETHUNTER (ditambahkan secara manual)
+          echo '# NetHunter options' >> out/.config
+          echo 'CONFIG_NETFILTER=y' >> out/.config
+          echo 'CONFIG_NF_NAT=y' >> out/.config
+          echo 'CONFIG_NETFILTER_XT_MATCH=y' >> out/.config
+          echo 'CONFIG_IP_NF=y' >> out/.config
+          echo 'CONFIG_IP6_NF=y' >> out/.config
+          echo 'CONFIG_NF_NAT_IPV4=y' >> out/.config
+          echo 'CONFIG_NF_NAT_IPV6=y' >> out/.config
+          echo 'CONFIG_HIDRAW=y' >> out/.config
+          echo 'CONFIG_USB_HIDDEV=y' >> out/.config
+          echo 'CONFIG_MAC80211=y' >> out/.config
+          echo 'CONFIG_CFG80211=y' >> out/.config
+          echo 'CONFIG_IP_NF_TARGET_MASQUERADE=y' >> out/.config
+          echo 'CONFIG_IP_NF_TARGET_REDIRECT=y' >> out/.config
+          echo 'CONFIG_IP_NF_NAT=y' >> out/.config
+          
+          # Opsi khusus ginkgo
+          echo 'CONFIG_LITTLE_CPU_MASK=63' >> out/.config
+          echo 'CONFIG_BIG_CPU_MASK=192' >> out/.config
+          
+          # 👇 REFRESH KONFIGURASI
+          make O=out ARCH=arm64 olddefconfig
+          
+          # 👇 BUILD KERNEL
+          make -j$(nproc) O=out ARCH=arm64 \
+            CC=clang \
+            CLANG_TRIPLE=aarch64-linux-gnu- \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            CROSS_COMPILE_ARM32=arm-linux-gnueabi-
+
+      - name: Package AnyKernel3
+        run: |
+          git clone --depth=1 https://github.com/osm0sis/AnyKernel3 AnyKernel3
+          cp out/arch/arm64/boot/Image.gz-dtb AnyKernel3/
+          cd AnyKernel3
+          zip -r9 ../FloppyKernel-XXKSU-DroidSpaces-NH.zip . -x '*.git*'
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FloppyKernel-XXKSU-DroidSpaces-NH
+          path: FloppyKernel-XXKSU-DroidSpaces-NH.zip
