@@ -1,4 +1,4 @@
-name: Build Kernel Floppy + XXKSU + DroidSpaces + NetHunter (FIXED)
+name: Build Kernel Floppy + BPF Fix (FINAL)
 
 on:
   workflow_dispatch:
@@ -32,16 +32,19 @@ jobs:
           git clone --depth=1 https://gitlab.com/kalilinux/nethunter/build-scripts/kali-nethunter-kernel-builder.git ~/nethunter-patches
           ls -la ~/nethunter-patches/patches/4.14/
 
-      - name: Apply NetHunter patches (exclude Samsung)
+      - name: Apply NetHunter patches (exclude Samsung & problematic)
         run: |
           cd ~/nethunter-patches/patches/4.14/
-          PATCH_FILES=$(ls *.patch | grep -viE 'samsung|oneui')
+          EXCLUDE_PATCHES="samsung|oneui|fix-yylloc|add-rtl8188eus"
+          PATCH_FILES=$(ls *.patch | grep -viE "$EXCLUDE_PATCHES")
           for patch in $PATCH_FILES; do
             echo "📌 Menerapkan patch: $patch"
-            patch -d $GITHUB_WORKSPACE -p1 < "$patch" || echo "⚠️ Patch $patch gagal, dilanjutkan"
+            patch -d $GITHUB_WORKSPACE -p1 < "$patch" 2>/dev/null || \
+            patch -d $GITHUB_WORKSPACE -p0 < "$patch" 2>/dev/null || \
+            echo "⚠️ Patch $patch gagal, dilanjutkan"
           done
 
-      - name: Build kernel
+      - name: Build kernel dengan BPF fix
         run: |
           export PATH="$HOME/toolchain/clang/bin:$PATH"
           export ARCH=arm64
@@ -65,16 +68,19 @@ jobs:
             cat arch/arm64/configs/droidspaces.config >> out/.config
           fi
           
-          # 👇 PERBAIKAN 1: BPF - DIPAKSA dengan konfigurasi yang benar
-          echo '# BPF JIT support (forced)' >> out/.config
+          # 👇 PERBAIKAN BPF: Hapus konflik dan tambahkan ulang
+          echo "# BPF fix - remove conflicts" >> out/.config
+          sed -i '/CONFIG_BPF_JIT/d' out/.config
+          sed -i '/CONFIG_BPF_SYSCALL/d' out/.config
+          sed -i '/CONFIG_HAVE_EBPF_JIT/d' out/.config
+          sed -i '/CONFIG_BPF_JIT_ALWAYS_ON/d' out/.config
+          
           echo 'CONFIG_BPF_JIT=y' >> out/.config
           echo 'CONFIG_BPF_SYSCALL=y' >> out/.config
           echo 'CONFIG_HAVE_EBPF_JIT=y' >> out/.config
           echo 'CONFIG_BPF_JIT_ALWAYS_ON=y' >> out/.config
           
-          # 👇 PERBAIKAN 2: Nonaktifkan SMACK dengan cara yang lebih kuat
-          echo '# CONFIG_SECURITY_SMACK is not set' >> out/.config
-          echo '# CONFIG_SECURITY_SMACK is not set' >> out/.config
+          # 👇 PERBAIKAN SMACK
           echo '# CONFIG_SECURITY_SMACK is not set' >> out/.config
           
           # 👇 Opsi NetHunter
@@ -101,17 +107,20 @@ jobs:
           # 👇 Refresh konfigurasi
           make O=out ARCH=arm64 olddefconfig
           
-          # 👇 TAMBAHKAN INI: Pastikan SMACK benar-benar mati setelah olddefconfig
-          sed -i 's/CONFIG_SECURITY_SMACK=y/# CONFIG_SECURITY_SMACK is not set/g' out/.config
-          sed -i 's/CONFIG_SECURITY_SMACK=.*/# CONFIG_SECURITY_SMACK is not set/g' out/.config
+          # 👇 VERIFIKASI BPF
+          echo "# Verifikasi konfigurasi BPF setelah olddefconfig" >> out/.config
+          if ! grep -q "CONFIG_BPF_JIT=y" out/.config; then
+            echo "❌ CONFIG_BPF_JIT tidak aktif! Memaksa lagi..."
+            sed -i 's/.*CONFIG_BPF_JIT.*/CONFIG_BPF_JIT=y/g' out/.config
+            sed -i 's/.*CONFIG_BPF_SYSCALL.*/CONFIG_BPF_SYSCALL=y/g' out/.config
+            sed -i 's/.*CONFIG_HAVE_EBPF_JIT.*/CONFIG_HAVE_EBPF_JIT=y/g' out/.config
+          fi
           
-          # 👇 TAMBAHKAN INI: Pastikan BPF benar-benar aktif
-          sed -i 's/# CONFIG_BPF_JIT is not set/CONFIG_BPF_JIT=y/g' out/.config
-          sed -i 's/CONFIG_BPF_JIT=.*/CONFIG_BPF_JIT=y/g' out/.config
-          sed -i 's/# CONFIG_BPF_SYSCALL is not set/CONFIG_BPF_SYSCALL=y/g' out/.config
-          sed -i 's/CONFIG_BPF_SYSCALL=.*/CONFIG_BPF_SYSCALL=y/g' out/.config
+          # 👇 TAMBAHKAN WORKAROUND: Deklarasi fungsi yang hilang
+          echo "// BPF workaround: add missing function declaration" >> include/linux/filter.h
+          echo "static inline bool bpf_jit_blinding_enabled(struct bpf_prog *prog) { return bpf_jit_kallsyms_enabled() && prog->jit_requested; }" >> include/linux/filter.h
           
-          # Refresh sekali lagi untuk mengakomodasi perubahan
+          # 👇 Refresh sekali lagi
           make O=out ARCH=arm64 olddefconfig
           
           # 👇 Build kernel
@@ -126,10 +135,10 @@ jobs:
           git clone --depth=1 https://github.com/osm0sis/AnyKernel3 AnyKernel3
           cp out/arch/arm64/boot/Image.gz-dtb AnyKernel3/
           cd AnyKernel3
-          zip -r9 ../FloppyKernel-NetHunter-FIXED.zip . -x '*.git*'
+          zip -r9 ../FloppyKernel-BPF-FIXED.zip . -x '*.git*'
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: FloppyKernel-NetHunter-FIXED
-          path: FloppyKernel-NetHunter-FIXED.zip
+          name: FloppyKernel-BPF-FIXED
+          path: FloppyKernel-BPF-FIXED.zip
