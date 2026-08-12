@@ -1,4 +1,4 @@
-name: Build Kernel Floppy + BPF Fix (FINAL)
+name: Build Kernel Floppy + KSU (Pure)
 
 on:
   workflow_dispatch:
@@ -27,24 +27,7 @@ jobs:
           mkdir -p ~/toolchain
           git clone --depth=1 https://github.com/ZyCromerZ/Clang --single-branch ~/toolchain/clang
 
-      - name: Clone Kali NetHunter kernel patches
-        run: |
-          git clone --depth=1 https://gitlab.com/kalilinux/nethunter/build-scripts/kali-nethunter-kernel-builder.git ~/nethunter-patches
-          ls -la ~/nethunter-patches/patches/4.14/
-
-      - name: Apply NetHunter patches (exclude Samsung & problematic)
-        run: |
-          cd ~/nethunter-patches/patches/4.14/
-          EXCLUDE_PATCHES="samsung|oneui|fix-yylloc|add-rtl8188eus"
-          PATCH_FILES=$(ls *.patch | grep -viE "$EXCLUDE_PATCHES")
-          for patch in $PATCH_FILES; do
-            echo "📌 Menerapkan patch: $patch"
-            patch -d $GITHUB_WORKSPACE -p1 < "$patch" 2>/dev/null || \
-            patch -d $GITHUB_WORKSPACE -p0 < "$patch" 2>/dev/null || \
-            echo "⚠️ Patch $patch gagal, dilanjutkan"
-          done
-
-      - name: Build kernel dengan BPF fix
+      - name: Build kernel (KSU only)
         run: |
           export PATH="$HOME/toolchain/clang/bin:$PATH"
           export ARCH=arm64
@@ -56,74 +39,22 @@ jobs:
           # 1. Defconfig dasar
           make O=out ARCH=arm64 ginkgo-stock_defconfig
           
-          # 2. Tambahkan XXKSU
-          if [ -f arch/arm64/configs/xxksu.config ]; then
-            echo "📌 Menambahkan XXKSU config"
-            cat arch/arm64/configs/xxksu.config >> out/.config
+          # 2. Tambahkan KernelSU (bukan XXKSU)
+          if [ -f arch/arm64/configs/ksu.config ]; then
+            echo "📌 Menambahkan KernelSU config"
+            cat arch/arm64/configs/ksu.config >> out/.config
+          else
+            echo "⚠️ File ksu.config tidak ditemukan"
           fi
           
-          # 3. Tambahkan DroidSpaces
-          if [ -f arch/arm64/configs/droidspaces.config ]; then
-            echo "📌 Menambahkan DroidSpaces config"
-            cat arch/arm64/configs/droidspaces.config >> out/.config
-          fi
-          
-          # 👇 PERBAIKAN BPF: Hapus konflik dan tambahkan ulang
-          echo "# BPF fix - remove conflicts" >> out/.config
-          sed -i '/CONFIG_BPF_JIT/d' out/.config
-          sed -i '/CONFIG_BPF_SYSCALL/d' out/.config
-          sed -i '/CONFIG_HAVE_EBPF_JIT/d' out/.config
-          sed -i '/CONFIG_BPF_JIT_ALWAYS_ON/d' out/.config
-          
-          echo 'CONFIG_BPF_JIT=y' >> out/.config
-          echo 'CONFIG_BPF_SYSCALL=y' >> out/.config
-          echo 'CONFIG_HAVE_EBPF_JIT=y' >> out/.config
-          echo 'CONFIG_BPF_JIT_ALWAYS_ON=y' >> out/.config
-          
-          # 👇 PERBAIKAN SMACK
-          echo '# CONFIG_SECURITY_SMACK is not set' >> out/.config
-          
-          # 👇 Opsi NetHunter
-          echo '# NetHunter options' >> out/.config
-          echo 'CONFIG_NETFILTER=y' >> out/.config
-          echo 'CONFIG_NF_NAT=y' >> out/.config
-          echo 'CONFIG_NETFILTER_XT_MATCH=y' >> out/.config
-          echo 'CONFIG_IP_NF=y' >> out/.config
-          echo 'CONFIG_IP6_NF=y' >> out/.config
-          echo 'CONFIG_NF_NAT_IPV4=y' >> out/.config
-          echo 'CONFIG_NF_NAT_IPV6=y' >> out/.config
-          echo 'CONFIG_HIDRAW=y' >> out/.config
-          echo 'CONFIG_USB_HIDDEV=y' >> out/.config
-          echo 'CONFIG_MAC80211=y' >> out/.config
-          echo 'CONFIG_CFG80211=y' >> out/.config
-          echo 'CONFIG_IP_NF_TARGET_MASQUERADE=y' >> out/.config
-          echo 'CONFIG_IP_NF_TARGET_REDIRECT=y' >> out/.config
-          echo 'CONFIG_IP_NF_NAT=y' >> out/.config
-          
-          # Opsi khusus ginkgo
+          # 3. Opsi khusus ginkgo (minimal)
           echo 'CONFIG_LITTLE_CPU_MASK=63' >> out/.config
           echo 'CONFIG_BIG_CPU_MASK=192' >> out/.config
           
-          # 👇 Refresh konfigurasi
+          # 4. Refresh konfigurasi
           make O=out ARCH=arm64 olddefconfig
           
-          # 👇 VERIFIKASI BPF
-          echo "# Verifikasi konfigurasi BPF setelah olddefconfig" >> out/.config
-          if ! grep -q "CONFIG_BPF_JIT=y" out/.config; then
-            echo "❌ CONFIG_BPF_JIT tidak aktif! Memaksa lagi..."
-            sed -i 's/.*CONFIG_BPF_JIT.*/CONFIG_BPF_JIT=y/g' out/.config
-            sed -i 's/.*CONFIG_BPF_SYSCALL.*/CONFIG_BPF_SYSCALL=y/g' out/.config
-            sed -i 's/.*CONFIG_HAVE_EBPF_JIT.*/CONFIG_HAVE_EBPF_JIT=y/g' out/.config
-          fi
-          
-          # 👇 TAMBAHKAN WORKAROUND: Deklarasi fungsi yang hilang
-          echo "// BPF workaround: add missing function declaration" >> include/linux/filter.h
-          echo "static inline bool bpf_jit_blinding_enabled(struct bpf_prog *prog) { return bpf_jit_kallsyms_enabled() && prog->jit_requested; }" >> include/linux/filter.h
-          
-          # 👇 Refresh sekali lagi
-          make O=out ARCH=arm64 olddefconfig
-          
-          # 👇 Build kernel
+          # 5. Build kernel
           make -j$(nproc) O=out ARCH=arm64 \
             CC=clang \
             CLANG_TRIPLE=aarch64-linux-gnu- \
@@ -135,10 +66,10 @@ jobs:
           git clone --depth=1 https://github.com/osm0sis/AnyKernel3 AnyKernel3
           cp out/arch/arm64/boot/Image.gz-dtb AnyKernel3/
           cd AnyKernel3
-          zip -r9 ../FloppyKernel-BPF-FIXED.zip . -x '*.git*'
+          zip -r9 ../FloppyKernel-KSU-Pure.zip . -x '*.git*'
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: FloppyKernel-BPF-FIXED
-          path: FloppyKernel-BPF-FIXED.zip
+          name: FloppyKernel-KSU-Pure
+          path: FloppyKernel-KSU-Pure.zip
