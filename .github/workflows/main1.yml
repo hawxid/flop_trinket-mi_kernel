@@ -1,4 +1,4 @@
-name: Build FloppyKernel (Official Script)
+name: Build FloppyKernel + NetHunter (XXKSU) - All Patches
 
 on:
   workflow_dispatch:
@@ -17,31 +17,44 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y git make bc bison flex libssl-dev libelf-dev python3 zip \
-            gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi ccache wget curl cpio
+            gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi ccache wget curl cpio patch
 
       - name: Fix ckbuild.sh dan beri izin eksekusi
         run: |
-          # Perbaiki baris source log.sh
           sed -i 's/source "${pwd}/source "$(pwd)/g' build/ckbuild.sh
-          
-          # 👇 BERI IZIN EKSEKUSI KE SEMUA SCRIPT
           chmod +x build/ckbuild.sh
           chmod +x build/scripts/*.sh
-          chmod +x build/lib/*.sh 2>/dev/null || true
-          
-          # Tampilkan isi ckbuild.sh untuk verifikasi
-          head -20 build/ckbuild.sh
 
-      - name: Build kernel with XXKSU (tanpa Telegram)
+      - name: Clone & apply NetHunter patches
         run: |
-          # Set environment variables yang dibutuhkan script
-          export WP=$(realpath $PWD/../)
+          git clone --depth=1 https://gitlab.com/kalilinux/nethunter/build-scripts/kali-nethunter-kernel-builder.git ~/nethunter-patches
+          cd ~/nethunter-patches/patches/4.14/
           
-          # Jalankan script resmi dengan XXKSU (-x)
+          # 👇 DAFTAR PATCH YANG AKAN DITERAPKAN
+          # Semua patch kecuali Samsung/OneUI
+          for patch in $(ls *.patch | grep -viE 'samsung|oneui|hcionfig'); do
+            echo "📌 Applying: $patch"
+            
+            # Coba dengan -p1, jika gagal coba -p0
+            if patch -d $GITHUB_WORKSPACE -p1 < "$patch" 2>/dev/null; then
+              echo "✅ $patch berhasil diterapkan (p1)"
+            elif patch -d $GITHUB_WORKSPACE -p0 < "$patch" 2>/dev/null; then
+              echo "✅ $patch berhasil diterapkan (p0)"
+            else
+              echo "⚠️ $patch gagal diterapkan, dilewati"
+            fi
+          done
+          
+          echo "📋 Ringkasan patch yang gagal (reject files):"
+          find $GITHUB_WORKSPACE -name "*.rej" 2>/dev/null | wc -l | xargs echo "Jumlah reject files:"
+
+      - name: Build kernel with XXKSU + NetHunter
+        run: |
+          export WP=$(realpath $PWD/../)
           ./build/ckbuild.sh ginkgo -x
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: FloppyKernel-XXKSU
+          name: FloppyKernel-XXKSU-NetHunter-AllPatches
           path: build/Floppy_*.zip
