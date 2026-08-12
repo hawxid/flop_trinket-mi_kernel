@@ -1,4 +1,4 @@
-name: Build Kernel Floppy + KSU (Pure)
+name: Build FloppyKernel (Official Script)
 
 on:
   workflow_dispatch:
@@ -16,60 +16,29 @@ jobs:
       - name: Setup build environment
         run: |
           sudo apt-get update
-          sudo apt-get install -y git make bc bison flex libssl-dev libelf-dev python3 zip gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi patch
+          sudo apt-get install -y git make bc bison flex libssl-dev libelf-dev python3 zip \
+            gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi ccache wget curl cpio
 
-      - name: Fix source patches
+      - name: Fix ckbuild.sh (perbaiki source path)
         run: |
-          sed -i '1s/^/#include <asm\/setup.h>\n/' fs/proc/cmdline.c
+          # Perbaiki baris source log.sh
+          sed -i 's/source "${pwd}/source "$(pwd)/g' build/ckbuild.sh
+          
+          # Tampilkan isi ckbuild.sh untuk verifikasi
+          head -20 build/ckbuild.sh
 
-      - name: Download toolchain
+      - name: Build kernel with XXKSU (tanpa Telegram)
         run: |
-          mkdir -p ~/toolchain
-          git clone --depth=1 https://github.com/ZyCromerZ/Clang --single-branch ~/toolchain/clang
-
-      - name: Build kernel (KSU only)
-        run: |
-          export PATH="$HOME/toolchain/clang/bin:$PATH"
-          export ARCH=arm64
-          export SUBARCH=arm64
-          export CROSS_COMPILE=aarch64-linux-gnu-
-          export CROSS_COMPILE_ARM32=arm-linux-gnueabi-
-          mkdir -p out
+          # Set environment variables yang dibutuhkan script
+          export WP=$(realpath $PWD/../)
           
-          # 1. Defconfig dasar
-          make O=out ARCH=arm64 ginkgo-stock_defconfig
-          
-          # 2. Tambahkan KernelSU (bukan XXKSU)
-          if [ -f arch/arm64/configs/ksu.config ]; then
-            echo "📌 Menambahkan KernelSU config"
-            cat arch/arm64/configs/ksu.config >> out/.config
-          else
-            echo "⚠️ File ksu.config tidak ditemukan"
-          fi
-          
-          # 3. Opsi khusus ginkgo (minimal)
-          echo 'CONFIG_LITTLE_CPU_MASK=63' >> out/.config
-          echo 'CONFIG_BIG_CPU_MASK=192' >> out/.config
-          
-          # 4. Refresh konfigurasi
-          make O=out ARCH=arm64 olddefconfig
-          
-          # 5. Build kernel
-          make -j$(nproc) O=out ARCH=arm64 \
-            CC=clang \
-            CLANG_TRIPLE=aarch64-linux-gnu- \
-            CROSS_COMPILE=aarch64-linux-gnu- \
-            CROSS_COMPILE_ARM32=arm-linux-gnueabi-
-
-      - name: Package AnyKernel3
-        run: |
-          git clone --depth=1 https://github.com/osm0sis/AnyKernel3 AnyKernel3
-          cp out/arch/arm64/boot/Image.gz-dtb AnyKernel3/
-          cd AnyKernel3
-          zip -r9 ../FloppyKernel-KSU-Pure.zip . -x '*.git*'
+          # Jalankan script resmi dengan XXKSU (-x)
+          # HAPUS argumen -t untuk menonaktifkan upload Telegram
+          # HAPUS argumen -o untuk menonaktifkan 0x0.st upload
+          ./build/ckbuild.sh ginkgo -x
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: FloppyKernel-KSU-Pure
-          path: FloppyKernel-KSU-Pure.zip
+          name: FloppyKernel-XXKSU
+          path: build/Floppy_*.zip
