@@ -50,30 +50,34 @@ jobs:
           export CROSS_COMPILE_ARM32=arm-linux-gnueabi-
           mkdir -p out
           
-          # Defconfig dasar
+          # 1. Defconfig dasar
           make O=out ARCH=arm64 ginkgo-stock_defconfig
           
-          # Tambahkan XXKSU
+          # 2. Tambahkan XXKSU
           if [ -f arch/arm64/configs/xxksu.config ]; then
             echo "📌 Menambahkan XXKSU config"
             cat arch/arm64/configs/xxksu.config >> out/.config
           fi
           
-          # Tambahkan DroidSpaces
+          # 3. Tambahkan DroidSpaces
           if [ -f arch/arm64/configs/droidspaces.config ]; then
             echo "📌 Menambahkan DroidSpaces config"
             cat arch/arm64/configs/droidspaces.config >> out/.config
           fi
           
-          # 👇 PERBAIKAN 1: Opsi BPF untuk error verifier.c
+          # 👇 PERBAIKAN 1: BPF - DIPAKSA dengan konfigurasi yang benar
+          echo '# BPF JIT support (forced)' >> out/.config
           echo 'CONFIG_BPF_JIT=y' >> out/.config
           echo 'CONFIG_BPF_SYSCALL=y' >> out/.config
           echo 'CONFIG_HAVE_EBPF_JIT=y' >> out/.config
+          echo 'CONFIG_BPF_JIT_ALWAYS_ON=y' >> out/.config
           
-          # 👇 PERBAIKAN 2: Nonaktifkan SMACK (penyebab error isp)
+          # 👇 PERBAIKAN 2: Nonaktifkan SMACK dengan cara yang lebih kuat
+          echo '# CONFIG_SECURITY_SMACK is not set' >> out/.config
+          echo '# CONFIG_SECURITY_SMACK is not set' >> out/.config
           echo '# CONFIG_SECURITY_SMACK is not set' >> out/.config
           
-          # Opsi NetHunter
+          # 👇 Opsi NetHunter
           echo '# NetHunter options' >> out/.config
           echo 'CONFIG_NETFILTER=y' >> out/.config
           echo 'CONFIG_NF_NAT=y' >> out/.config
@@ -94,10 +98,23 @@ jobs:
           echo 'CONFIG_LITTLE_CPU_MASK=63' >> out/.config
           echo 'CONFIG_BIG_CPU_MASK=192' >> out/.config
           
-          # Refresh konfigurasi
+          # 👇 Refresh konfigurasi
           make O=out ARCH=arm64 olddefconfig
           
-          # Build
+          # 👇 TAMBAHKAN INI: Pastikan SMACK benar-benar mati setelah olddefconfig
+          sed -i 's/CONFIG_SECURITY_SMACK=y/# CONFIG_SECURITY_SMACK is not set/g' out/.config
+          sed -i 's/CONFIG_SECURITY_SMACK=.*/# CONFIG_SECURITY_SMACK is not set/g' out/.config
+          
+          # 👇 TAMBAHKAN INI: Pastikan BPF benar-benar aktif
+          sed -i 's/# CONFIG_BPF_JIT is not set/CONFIG_BPF_JIT=y/g' out/.config
+          sed -i 's/CONFIG_BPF_JIT=.*/CONFIG_BPF_JIT=y/g' out/.config
+          sed -i 's/# CONFIG_BPF_SYSCALL is not set/CONFIG_BPF_SYSCALL=y/g' out/.config
+          sed -i 's/CONFIG_BPF_SYSCALL=.*/CONFIG_BPF_SYSCALL=y/g' out/.config
+          
+          # Refresh sekali lagi untuk mengakomodasi perubahan
+          make O=out ARCH=arm64 olddefconfig
+          
+          # 👇 Build kernel
           make -j$(nproc) O=out ARCH=arm64 \
             CC=clang \
             CLANG_TRIPLE=aarch64-linux-gnu- \
