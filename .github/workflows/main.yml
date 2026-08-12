@@ -1,14 +1,1 @@
-name: Interactive Shell
 
-on:
-  workflow_dispatch:
-
-jobs:
-  interactive-shell:
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Checkout Source Kernel
-        uses: actions/checkout@v4
-
-      - name: Setup Interaktif Shell SSH
-        uses: mxschmitt/action-tmate@v3
