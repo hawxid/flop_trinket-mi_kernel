@@ -57,7 +57,7 @@ jobs:
           mkdir -p out
           
           # 👇 Gunakan defconfig dasar
-          make O=out ARCH=arm64 ginkgo_stock_defconfig
+          make O=out ARCH=arm64 ginkgo-stock_defconfig
           
           # 👇 TAMBAHKAN XXKSU (bukan KSU biasa)
           if [ -f arch/arm64/configs/xxksu.config ]; then
