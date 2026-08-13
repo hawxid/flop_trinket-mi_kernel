@@ -1,4 +1,4 @@
-name: Build FloppyKernel + XXKSU + NetHunter (FINAL)
+name: Build FloppyKernel + XXKSU + NetHunter (Resmi)
 
 on:
   workflow_dispatch:
@@ -38,23 +38,29 @@ jobs:
             echo "⚠️ $patch failed, skipped"
           done
 
-      - name: Build kernel dengan XXKSU + NetHunter
+      - name: Build awal dengan XXKSU (pakai script resmi)
+        id: build_awal
         run: |
           export WP=$(realpath $PWD/../)
+          # Jalankan script resmi untuk build XXKSU
+          ./build/ckbuild.sh ginkgo -x
+
+      - name: Tambahkan opsi NetHunter + Disable LTO
+        run: |
+          # 🔑 Set environment dari tc.sh (sama seperti yang dipakai build awal)
           export ARCH=arm64
           export SUBARCH=arm64
           export CROSS_COMPILE=aarch64-linux-gnu-
           export CROSS_COMPILE_ARM32=arm-linux-gnueabi-
+          # Asumsi tc.sh mendownload Clang ke ~/toolchain/clang
           export PATH="$HOME/toolchain/clang/bin:$PATH"
+          export LLVM=1
           
-          # Step 1: Defconfig dasar via script
-          ./build/ckbuild.sh ginkgo -x
-          
-          # Step 2: Tambahkan opsi NetHunter + DISABLE LTO
           echo "# ==========================================" >> out/.config
           echo "# NETHUNTER CONFIGURATION" >> out/.config
           echo "# ==========================================" >> out/.config
           
+          # Netfilter
           echo 'CONFIG_NETFILTER=y' >> out/.config
           echo 'CONFIG_NF_NAT=y' >> out/.config
           echo 'CONFIG_NETFILTER_XT_MATCH=y' >> out/.config
@@ -66,6 +72,7 @@ jobs:
           echo 'CONFIG_IP_NF_TARGET_REDIRECT=y' >> out/.config
           echo 'CONFIG_IP_NF_NAT=y' >> out/.config
           
+          # HID
           echo 'CONFIG_HID=y' >> out/.config
           echo 'CONFIG_HIDRAW=y' >> out/.config
           echo 'CONFIG_UHID=y' >> out/.config
@@ -73,6 +80,7 @@ jobs:
           echo 'CONFIG_USB_HIDDEV=y' >> out/.config
           echo 'CONFIG_HID_GENERIC=y' >> out/.config
           
+          # Wireless
           echo 'CONFIG_MAC80211=y' >> out/.config
           echo 'CONFIG_CFG80211=y' >> out/.config
           echo 'CONFIG_ATH9K_HTC=y' >> out/.config
@@ -81,6 +89,7 @@ jobs:
           echo 'CONFIG_RTL8812AU=y' >> out/.config
           echo 'CONFIG_RTL88XXAU=y' >> out/.config
           
+          # Bluetooth
           echo 'CONFIG_BT_RFCOMM=y' >> out/.config
           echo 'CONFIG_BT_RFCOMM_TTY=y' >> out/.config
           echo 'CONFIG_BT_BNEP=y' >> out/.config
@@ -95,6 +104,7 @@ jobs:
           echo 'CONFIG_BT_MTK=y' >> out/.config
           echo 'CONFIG_BT_INTEL=y' >> out/.config
           
+          # USB Gadget
           echo 'CONFIG_USB_GADGET=y' >> out/.config
           echo 'CONFIG_USB_CONFIGFS=y' >> out/.config
           echo 'CONFIG_USB_CONFIGFS_ACM=y' >> out/.config
@@ -110,14 +120,17 @@ jobs:
           echo 'CONFIG_USB_CONFIGFS_F_FS=y' >> out/.config
           echo 'CONFIG_USB_CONFIGFS_UEVENT=y' >> out/.config
           
+          # Android Binder
           echo 'CONFIG_ANDROID_BINDER_IPC=y' >> out/.config
           
+          # Filesystems
           echo 'CONFIG_NFS_FS=y' >> out/.config
           echo 'CONFIG_NFS_V3=y' >> out/.config
           echo 'CONFIG_NFS_V4=y' >> out/.config
           echo 'CONFIG_CIFS=y' >> out/.config
           echo 'CONFIG_FUSE_FS=y' >> out/.config
           
+          # CAN Bus
           echo 'CONFIG_CAN=y' >> out/.config
           echo 'CONFIG_CAN_RAW=y' >> out/.config
           echo 'CONFIG_CAN_BCM=y' >> out/.config
@@ -127,14 +140,16 @@ jobs:
           echo 'CONFIG_CAN_DEV=y' >> out/.config
           echo 'CONFIG_CAN_CALC_BITTIMING=y' >> out/.config
           
+          # BPF
           echo 'CONFIG_BPF_JIT=y' >> out/.config
           echo 'CONFIG_BPF_SYSCALL=y' >> out/.config
           echo 'CONFIG_HAVE_EBPF_JIT=y' >> out/.config
           echo 'CONFIG_BPF_JIT_ALWAYS_ON=y' >> out/.config
           
+          # Nonaktifkan SMACK
           echo '# CONFIG_SECURITY_SMACK is not set' >> out/.config
           
-          # 👇 DISABLE LTO (penyebab utama error ld.gold)
+          # 👇 DISABLE LTO
           echo '# CONFIG_LTO_CLANG is not set' >> out/.config
           echo '# CONFIG_LTO_NONE is not set' >> out/.config
           echo 'CONFIG_LTO_NONE=y' >> out/.config
@@ -144,16 +159,16 @@ jobs:
           echo "# END NETHUNTER CONFIGURATION" >> out/.config
           echo "# ==========================================" >> out/.config
           
-          # Step 3: Refresh konfigurasi
+          # Refresh konfigurasi
           make O=out ARCH=arm64 olddefconfig
           
-          # Step 4: Build dengan LD=ld.lld (bukan ld.gold)
+          # Build ulang dengan environment yang SAMA seperti build awal
           make -j$(nproc) O=out ARCH=arm64 \
             CC=clang \
-            LD=ld.lld \
             CLANG_TRIPLE=aarch64-linux-gnu- \
             CROSS_COMPILE=aarch64-linux-gnu- \
-            CROSS_COMPILE_ARM32=arm-linux-gnueabi-
+            CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
+            LLVM=1
 
       - name: Package AnyKernel3
         run: |
