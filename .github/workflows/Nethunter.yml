@@ -1,4 +1,4 @@
-name: Build FloppyKernel + XXKSU + NetHunter (Resmi)
+name: Build FloppyKernel + XXKSU + NetHunter (FINAL)
 
 on:
   workflow_dispatch:
@@ -38,24 +38,21 @@ jobs:
             echo "⚠️ $patch failed, skipped"
           done
 
-      - name: Build awal dengan XXKSU (pakai script resmi)
-        id: build_awal
+      - name: Build kernel + tambah NetHunter (1 step)
         run: |
+          # Step 1: Build awal dengan XXKSU (pakai script resmi)
           export WP=$(realpath $PWD/../)
-          # Jalankan script resmi untuk build XXKSU
           ./build/ckbuild.sh ginkgo -x
-
-      - name: Tambahkan opsi NetHunter + Disable LTO
-        run: |
-          # 🔑 Set environment dari tc.sh (sama seperti yang dipakai build awal)
+          
+          # Step 2: Set environment dari tc.sh (PATH sudah diset oleh ckbuild.sh)
           export ARCH=arm64
           export SUBARCH=arm64
           export CROSS_COMPILE=aarch64-linux-gnu-
           export CROSS_COMPILE_ARM32=arm-linux-gnueabi-
-          # Asumsi tc.sh mendownload Clang ke ~/toolchain/clang
           export PATH="$HOME/toolchain/clang/bin:$PATH"
           export LLVM=1
           
+          # Step 3: Tambahkan opsi NetHunter + Disable LTO
           echo "# ==========================================" >> out/.config
           echo "# NETHUNTER CONFIGURATION" >> out/.config
           echo "# ==========================================" >> out/.config
@@ -149,7 +146,7 @@ jobs:
           # Nonaktifkan SMACK
           echo '# CONFIG_SECURITY_SMACK is not set' >> out/.config
           
-          # 👇 DISABLE LTO
+          # Disable LTO
           echo '# CONFIG_LTO_CLANG is not set' >> out/.config
           echo '# CONFIG_LTO_NONE is not set' >> out/.config
           echo 'CONFIG_LTO_NONE=y' >> out/.config
@@ -159,10 +156,10 @@ jobs:
           echo "# END NETHUNTER CONFIGURATION" >> out/.config
           echo "# ==========================================" >> out/.config
           
-          # Refresh konfigurasi
+          # Refresh config
           make O=out ARCH=arm64 olddefconfig
           
-          # Build ulang dengan environment yang SAMA seperti build awal
+          # Rebuild dengan environment yang SAMA
           make -j$(nproc) O=out ARCH=arm64 \
             CC=clang \
             CLANG_TRIPLE=aarch64-linux-gnu- \
