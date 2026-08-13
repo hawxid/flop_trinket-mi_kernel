@@ -1,4 +1,4 @@
-name: Build FloppyKernel + XXKSU + NetHunter (FULL - FIXED V2)
+name: Build FloppyKernel + XXKSU + NetHunter (Clang + PATH Fix)
 
 on:
   workflow_dispatch:
@@ -19,18 +19,17 @@ jobs:
           sudo apt-get install -y git make bc bison flex libssl-dev libelf-dev python3 zip \
             gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi ccache wget curl cpio patch
 
-      - name: Fix ckbuild.sh dan beri izin eksekusi
+      - name: Fix ckbuild.sh & permission
         run: |
           sed -i 's/source "${pwd}/source "$(pwd)/g' build/ckbuild.sh
           chmod +x build/ckbuild.sh
           chmod +x build/scripts/*.sh
           chmod +x build/lib/*.sh 2>/dev/null || true
 
-      - name: Clone & apply NetHunter patches (skip Samsung/OneUI)
+      - name: Clone & apply NetHunter patches
         run: |
           git clone --depth=1 https://gitlab.com/kalilinux/nethunter/build-scripts/kali-nethunter-kernel-builder.git ~/nethunter-patches
           cd ~/nethunter-patches/patches/4.14/
-          
           for patch in $(ls *.patch | grep -viE 'samsung|oneui|hcionfig'); do
             echo "📌 Applying: $patch"
             patch -d $GITHUB_WORKSPACE -p1 < "$patch" 2>/dev/null || \
@@ -38,31 +37,23 @@ jobs:
             echo "⚠️ $patch failed, skipped"
           done
 
-      - name: Fix VDSO compilation
-        run: |
-          # Fix VDSO Makefile untuk Clang
-          sed -i 's/-mcmodel=small/-mcmodel=small -fno-stack-protector/g' arch/arm64/kernel/vdso/Makefile
-          echo 'CFLAGS_REMOVE_vdso.o = -pg' >> arch/arm64/kernel/vdso/Makefile
-          echo 'CFLAGS_REMOVE_vgettimeofday.o = -pg' >> arch/arm64/kernel/vdso/Makefile
-
-      - name: Build kernel dengan XXKSU + NetHunter (SATU TAHAP)
+      - name: Build awal dengan XXKSU (pakai script resmi)
         run: |
           export WP=$(realpath $PWD/../)
+          # ckbuild.sh akan menjalankan tc.sh yang mengatur PATH
+          ./build/ckbuild.sh ginkgo -x
+
+      - name: Tambahkan opsi NetHunter + Disable LTO & VDSO
+        run: |
+          # 🔑 SET PATH KE TOOLCHAIN CLANG SECARA EKSPLISIT
+          export PATH="$HOME/toolchain/clang/bin:$PATH"
+          export LLVM=1
           export ARCH=arm64
           export SUBARCH=arm64
           export CROSS_COMPILE=aarch64-linux-gnu-
           export CROSS_COMPILE_ARM32=arm-linux-gnueabi-
-          export PATH="$HOME/toolchain/clang/bin:$PATH"
           
-          # Build dengan XXKSU (pake script resmi)
-          ./build/ckbuild.sh ginkgo -x
-          
-          # TAMBAHKAN OPSI NETHUNTER KE .config
-          echo "# ==========================================" >> out/.config
-          echo "# NETHUNTER FULL CONFIGURATION" >> out/.config
-          echo "# ==========================================" >> out/.config
-          
-          # Netfilter
+          echo "# NETHUNTER OPTIONS" >> out/.config
           echo 'CONFIG_NETFILTER=y' >> out/.config
           echo 'CONFIG_NF_NAT=y' >> out/.config
           echo 'CONFIG_NETFILTER_XT_MATCH=y' >> out/.config
@@ -73,16 +64,12 @@ jobs:
           echo 'CONFIG_IP_NF_TARGET_MASQUERADE=y' >> out/.config
           echo 'CONFIG_IP_NF_TARGET_REDIRECT=y' >> out/.config
           echo 'CONFIG_IP_NF_NAT=y' >> out/.config
-          
-          # HID
           echo 'CONFIG_HID=y' >> out/.config
           echo 'CONFIG_HIDRAW=y' >> out/.config
           echo 'CONFIG_UHID=y' >> out/.config
           echo 'CONFIG_USB_HID=y' >> out/.config
           echo 'CONFIG_USB_HIDDEV=y' >> out/.config
           echo 'CONFIG_HID_GENERIC=y' >> out/.config
-          
-          # Wireless
           echo 'CONFIG_MAC80211=y' >> out/.config
           echo 'CONFIG_CFG80211=y' >> out/.config
           echo 'CONFIG_ATH9K_HTC=y' >> out/.config
@@ -90,16 +77,12 @@ jobs:
           echo 'CONFIG_RTL8188EU=y' >> out/.config
           echo 'CONFIG_RTL8812AU=y' >> out/.config
           echo 'CONFIG_RTL88XXAU=y' >> out/.config
-          
-          # Bluetooth Arsenal
           echo 'CONFIG_BT_RFCOMM=y' >> out/.config
           echo 'CONFIG_BT_RFCOMM_TTY=y' >> out/.config
           echo 'CONFIG_BT_BNEP=y' >> out/.config
           echo 'CONFIG_BT_HIDP=y' >> out/.config
           echo 'CONFIG_BT_HCIVHCI=y' >> out/.config
           echo 'CONFIG_BT_L2CAP=y' >> out/.config
-          
-          # Bluetooth Drivers
           echo 'CONFIG_BT_HCIUART=y' >> out/.config
           echo 'CONFIG_BT_HCIUART_H4=y' >> out/.config
           echo 'CONFIG_BT_BCM=y' >> out/.config
@@ -107,8 +90,6 @@ jobs:
           echo 'CONFIG_BT_QCA=y' >> out/.config
           echo 'CONFIG_BT_MTK=y' >> out/.config
           echo 'CONFIG_BT_INTEL=y' >> out/.config
-          
-          # USB Gadget
           echo 'CONFIG_USB_GADGET=y' >> out/.config
           echo 'CONFIG_USB_CONFIGFS=y' >> out/.config
           echo 'CONFIG_USB_CONFIGFS_ACM=y' >> out/.config
@@ -123,18 +104,12 @@ jobs:
           echo 'CONFIG_USB_CONFIGFS_F_LB_SS=y' >> out/.config
           echo 'CONFIG_USB_CONFIGFS_F_FS=y' >> out/.config
           echo 'CONFIG_USB_CONFIGFS_UEVENT=y' >> out/.config
-          
-          # Android Binder
           echo 'CONFIG_ANDROID_BINDER_IPC=y' >> out/.config
-          
-          # Filesystems
           echo 'CONFIG_NFS_FS=y' >> out/.config
           echo 'CONFIG_NFS_V3=y' >> out/.config
           echo 'CONFIG_NFS_V4=y' >> out/.config
           echo 'CONFIG_CIFS=y' >> out/.config
           echo 'CONFIG_FUSE_FS=y' >> out/.config
-          
-          # CAN Bus
           echo 'CONFIG_CAN=y' >> out/.config
           echo 'CONFIG_CAN_RAW=y' >> out/.config
           echo 'CONFIG_CAN_BCM=y' >> out/.config
@@ -143,39 +118,39 @@ jobs:
           echo 'CONFIG_CAN_SLCAN=m' >> out/.config
           echo 'CONFIG_CAN_DEV=y' >> out/.config
           echo 'CONFIG_CAN_CALC_BITTIMING=y' >> out/.config
-          
-          # BPF fix
           echo 'CONFIG_BPF_JIT=y' >> out/.config
           echo 'CONFIG_BPF_SYSCALL=y' >> out/.config
           echo 'CONFIG_HAVE_EBPF_JIT=y' >> out/.config
           echo 'CONFIG_BPF_JIT_ALWAYS_ON=y' >> out/.config
-          
-          # Nonaktifkan SMACK
           echo '# CONFIG_SECURITY_SMACK is not set' >> out/.config
           
-          echo "# ==========================================" >> out/.config
-          echo "# END NETHUNTER FULL CONFIGURATION" >> out/.config
-          echo "# ==========================================" >> out/.config
+          # Disable LTO & VDSO
+          echo '# CONFIG_LTO_CLANG is not set' >> out/.config
+          echo 'CONFIG_LTO_NONE=y' >> out/.config
+          echo '# CONFIG_LTO is not set' >> out/.config
+          echo '# CONFIG_VDSO is not set' >> out/.config
           
-          # Refresh konfigurasi
+          # Refresh config
           make O=out ARCH=arm64 olddefconfig
           
-          # LANJUTKAN BUILD (tanpa rebuild terpisah)
+          # Build ulang pake Clang (dengan PATH yang sudah di-set)
           make -j$(nproc) O=out ARCH=arm64 \
             CC=clang \
+            LD=ld.lld \
             CLANG_TRIPLE=aarch64-linux-gnu- \
             CROSS_COMPILE=aarch64-linux-gnu- \
-            CROSS_COMPILE_ARM32=arm-linux-gnueabi-
+            CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
+            LLVM=1
 
       - name: Package AnyKernel3
         run: |
           git clone --depth=1 https://github.com/Flopster101/AnyKernel3 -b floppy-unity AnyKernel3
           cp out/arch/arm64/boot/Image.gz-dtb AnyKernel3/
           cd AnyKernel3
-          zip -r9 ../FloppyKernel-XXKSU-NetHunter-FULL.zip . -x '*.git*'
+          zip -r9 ../FloppyKernel-XXKSU-NetHunter-FIXED.zip . -x '*.git*'
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: FloppyKernel-XXKSU-NetHunter-FULL
-          path: FloppyKernel-XXKSU-NetHunter-FULL.zip
+          name: FloppyKernel-XXKSU-NetHunter-FIXED
+          path: FloppyKernel-XXKSU-NetHunter-FIXED.zip
