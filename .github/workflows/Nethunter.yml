@@ -1,4 +1,4 @@
- name: Build FloppyKernel + XXKSU + NetHunter (ALL-IN-ONE)
+name: Build FloppyKernel + XXKSU + NetHunter (ALL-IN-ONE)
  
  on:
    workflow_dispatch:
