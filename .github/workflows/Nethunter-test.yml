@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4.2.0
         with:
           submodules: recursive
           fetch-depth: 1
@@ -44,100 +44,56 @@ jobs:
           
           echo "📥 Downloading NetHunter patches for kernel 4.14..."
           
-          # QCACLD 3.0 WiFi Injection
           curl -L -o patches/nethunter/001-add-qcacld-3.0-injection-4.14.patch \
             "https://gitlab.com/kalilinux/nethunter/build-scripts/kali-nethunter-kernel-builder/-/raw/main/patches/4.14/add-qcacld-3.0-injection-4.14.patch" \
             && echo "✅ Downloaded: add-qcacld-3.0-injection-4.14.patch" \
             || echo "⚠️ Failed: add-qcacld-3.0-injection-4.14.patch"
           
-          # Core WiFi Injection
           curl -L -o patches/nethunter/002-add-wifi-injection-4.14.patch \
             "https://gitlab.com/kalilinux/nethunter/build-scripts/kali-nethunter-kernel-builder/-/raw/main/patches/4.14/add-wifi-injection-4.14.patch" \
             && echo "✅ Downloaded: add-wifi-injection-4.14.patch" \
             || echo "⚠️ Failed: add-wifi-injection-4.14.patch"
           
-          # RTW88 WiFi Driver
           curl -L -o patches/nethunter/003-add-rtw88-drivers-4.14.patch \
             "https://gitlab.com/kalilinux/nethunter/build-scripts/kali-nethunter-kernel-builder/-/raw/main/patches/4.14/add-rtw88-drivers-4.14.patch" \
             && echo "✅ Downloaded: add-rtw88-drivers-4.14.patch" \
             || echo "⚠️ Failed: add-rtw88-drivers-4.14.patch"
           
           echo ""
-          echo "📋 Downloaded patches:"
-          ls -lh patches/nethunter/*.patch 2>/dev/null || echo "No patches found"
+          ls -lh patches/nethunter/*.patch 2>/dev/null || echo "No patches"
 
       - name: Apply NetHunter Patches
         run: |
           cd "$GITHUB_WORKSPACE"
-          
-          echo "🔧 Applying NetHunter patches..."
-          echo "================================"
-          
           APPLIED=0
           FAILED=0
           
           for patch_file in patches/nethunter/*.patch; do
-            if [ ! -f "$patch_file" ]; then
-              continue
-            fi
-            
+            [ -f "$patch_file" ] || continue
             patch_name=$(basename "$patch_file")
-            echo ""
             echo "📌 Processing: $patch_name"
             
-            # Try -p1 first
             if patch -p1 --dry-run < "$patch_file" &>/dev/null; then
-              if patch -p1 < "$patch_file" 2>/dev/null; then
-                echo "✅ Applied: $patch_name"
-                ((APPLIED++))
-              else
-                echo "❌ Failed: $patch_name"
-                ((FAILED++))
-              fi
-            # Try -p0
+              patch -p1 < "$patch_file" 2>/dev/null && ((APPLIED++)) || ((FAILED++))
             elif patch -p0 --dry-run < "$patch_file" &>/dev/null; then
-              if patch -p0 < "$patch_file" 2>/dev/null; then
-                echo "✅ Applied (p0): $patch_name"
-                ((APPLIED++))
-              else
-                echo "❌ Failed: $patch_name"
-                ((FAILED++))
-              fi
+              patch -p0 < "$patch_file" 2>/dev/null && ((APPLIED++)) || ((FAILED++))
             else
-              echo "⚠️ Skipped (incompatible): $patch_name"
+              echo "⚠️ Skipped: $patch_name"
               ((FAILED++))
             fi
           done
           
-          echo ""
-          echo "================================"
-          echo "✅ Applied: $APPLIED"
-          echo "⚠️ Failed/Skipped: $FAILED"
-          echo "================================"
+          echo "✅ Applied: $APPLIED | ⚠️ Failed: $FAILED"
 
-      - name: Build Kernel (XXKSU + NetHunter WiFi)
-        env:
-          LOG_UPLOAD: 0
+      - name: Build Kernel
         run: |
           export WP="$(realpath "$PWD/..")"
-          echo "🚀 Building FloppyKernel XXKSU + NetHunter WiFi..."
           bash build/ckbuild.sh ginkgo x
 
       - name: Upload Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v4.4.3
         with:
           name: FloppyKernel-XXKSU-NetHunter-WiFi-Ginkgo
           path: build/Floppy_*.zip
           if-no-files-found: error
           overwrite: true
-
-      - name: Build Summary
-        if: always()
-        run: |
-          echo ""
-          echo "🎉 Build Complete!"
-          echo "================================"
-          echo "Device: Ginkgo"
-          echo "Variant: XXKSU + NetHunter WiFi"
-          echo "Patches: QCACLD + WiFi + RTW88"
-          echo "================================"
