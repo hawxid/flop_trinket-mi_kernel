@@ -173,6 +173,8 @@ jobs:
       # STEP 3: BUILD DENGAN SCRIPT RESMI (SEMUA DALAM SATU SHELL)
       # ============================================
       - name: Build kernel dengan XXKSU + NetHunter
+        env:
+          LOG_UPLOAD: 0
         run: |
           export WP="$(realpath "$PWD/..")"
           
@@ -182,12 +184,17 @@ jobs:
           # Semua opsi NetHunter sudah ada di droidspaces.config (akan otomatis di-load)
           ./build/ckbuild.sh ginkgo -x
 
-      - name: Package AnyKernel3
+      - name: Prepare build artifact
         run: |
-          git clone --depth=1 --branch floppy-reborn https://github.com/Flopster101/AnyKernel3 AnyKernel3
-          cp out/arch/arm64/boot/Image.gz-dtb AnyKernel3/
-          cd AnyKernel3
-          zip -r9 ../FloppyKernel-XXKSU-NetHunter-ALLINONE.zip . -x '*.git*'
+          shopt -s nullglob
+          archives=(build/Floppy_*.zip)
+          if (( ${#archives[@]} != 1 )); then
+            echo "Expected exactly one kernel ZIP, found ${#archives[@]}"
+            printf '%s\n' "${archives[@]}"
+            exit 1
+          fi
+          mv -- "${archives[0]}" FloppyKernel-XXKSU-NetHunter-ALLINONE.zip
+          zip -T FloppyKernel-XXKSU-NetHunter-ALLINONE.zip
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

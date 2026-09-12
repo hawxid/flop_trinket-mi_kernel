@@ -178,16 +178,25 @@ fi
 TEST_CHANNEL=1
 #TEST_BUILD=0
 
-# Upload build log
-LOG_UPLOAD=1
+# Upload build log. CI can disable this to keep builds self-contained.
+LOG_UPLOAD="${LOG_UPLOAD:-1}"
 
 ## Secrets
-if [[ "$TEST_CHANNEL" == "0" ]]; then
-    TELEGRAM_CHAT_ID="$(cat ../chat)"
-elif [[ "$TEST_CHANNEL" == "1" ]]; then
-    TELEGRAM_CHAT_ID="$(cat ../chat_test)"
+if [[ "$DO_TG" == "1" ]]; then
+    if [[ -z "${TELEGRAM_CHAT_ID:-}" ]]; then
+        if [[ "$TEST_CHANNEL" == "0" ]]; then
+            TELEGRAM_CHAT_ID="$(cat ../chat)"
+        elif [[ "$TEST_CHANNEL" == "1" ]]; then
+            TELEGRAM_CHAT_ID="$(cat ../chat_test)"
+        fi
+    fi
+    TELEGRAM_BOT_TOKEN="${TELEGRAM_BOT_TOKEN:-$(cat ../bot_token)}"
+
+    if [[ -z "$TELEGRAM_CHAT_ID" || -z "$TELEGRAM_BOT_TOKEN" ]]; then
+        log_err "Telegram upload requested but Telegram credentials are missing"
+        exit 1
+    fi
 fi
-TELEGRAM_BOT_TOKEN="$(cat ../bot_token)"
 
 ## Build type
 LINUX_VER=$(make kernelversion 2>/dev/null)
