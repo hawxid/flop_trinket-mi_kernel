@@ -3,6 +3,17 @@ name: Build FloppyKernel + XXKSU + NetHunter (ALL-IN-ONE)
 on:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: kernel-build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
 jobs:
   build:
     runs-on: ubuntu-22.04
@@ -11,12 +22,12 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
-          ref: floppy-unity
+          fetch-depth: 1
 
       - name: Setup build environment
         run: |
           sudo apt-get update
-          sudo apt-get install -y git make bc bison flex libssl-dev libelf-dev python3 zip \
+          sudo apt-get install -y git make bc bison flex libssl-dev libelf-dev libncurses-dev python3 zip \
             gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi ccache wget curl cpio patch
 
       - name: Fix script permissions
@@ -31,14 +42,17 @@ jobs:
       - name: Clone & apply NetHunter patches (skip Samsung)
         run: |
           git clone --depth=1 https://gitlab.com/kalilinux/nethunter/build-scripts/kali-nethunter-kernel-builder.git ~/nethunter-patches
-          cd ~/nethunter-patches/patches/4.14/
-          
-          for patch in $(ls *.patch | grep -viE 'samsung|oneui|hcionfig'); do
+          patch_dir="$HOME/nethunter-patches/patches/4.14"
+          test -d "$patch_dir"
+
+          while IFS= read -r -d '' patch_file; do
+            patch="${patch_file##*/}"
             echo "📌 Applying: $patch"
-            patch -d $GITHUB_WORKSPACE -p1 < "$patch" 2>/dev/null || \
-            patch -d $GITHUB_WORKSPACE -p0 < "$patch" 2>/dev/null || \
+            patch -d "$GITHUB_WORKSPACE" -p1 < "$patch_file" 2>/dev/null || \
+            patch -d "$GITHUB_WORKSPACE" -p0 < "$patch_file" 2>/dev/null || \
             echo "⚠️ $patch failed, skipped"
-          done
+          done < <(find "$patch_dir" -maxdepth 1 -type f -name '*.patch' \
+            ! -iname '*samsung*' ! -iname '*oneui*' ! -iname '*hcionfig*' -print0 | sort -z)
 
       # ============================================
       # STEP 2: PATCH DROIDSPACES.CONFIG DENGAN SEMUA OPSI NETHUNTER
@@ -47,7 +61,7 @@ jobs:
         run: |
           echo "🔧 Menambahkan semua opsi NetHunter ke droidspaces.config..."
           
-          cat >> arch/arm64/configs/droidspaces.config << 'EOF'
+          cat >> arch/arm64/configs/droidspaces.config <<'EOF'
           
           # ==========================================
           # NETHUNTER FULL OPTIONS
@@ -159,8 +173,10 @@ jobs:
       # STEP 3: BUILD DENGAN SCRIPT RESMI (SEMUA DALAM SATU SHELL)
       # ============================================
       - name: Build kernel dengan XXKSU + NetHunter
+        env:
+          LOG_UPLOAD: 0
         run: |
-          export WP=$(realpath $PWD/../)
+          export WP="$(realpath "$PWD/..")"
           
           echo "🚀 Memulai build dengan XXKSU + NetHunter..."
           
@@ -168,15 +184,21 @@ jobs:
           # Semua opsi NetHunter sudah ada di droidspaces.config (akan otomatis di-load)
           ./build/ckbuild.sh ginkgo -x
 
-      - name: Package AnyKernel3
+      - name: Prepare build artifact
         run: |
-          git clone --depth=1 https://github.com/Flopster101/AnyKernel3 -b floppy-unity AnyKernel3
-          cp out/arch/arm64/boot/Image.gz-dtb AnyKernel3/
-          cd AnyKernel3
-          zip -r9 ../FloppyKernel-XXKSU-NetHunter-ALLINONE.zip . -x '*.git*'
+          shopt -s nullglob
+          archives=(build/Floppy_*.zip)
+          if (( ${#archives[@]} != 1 )); then
+            echo "Expected exactly one kernel ZIP, found ${#archives[@]}"
+            printf '%s\n' "${archives[@]}"
+            exit 1
+          fi
+          mv -- "${archives[0]}" FloppyKernel-XXKSU-NetHunter-ALLINONE.zip
+          zip -T FloppyKernel-XXKSU-NetHunter-ALLINONE.zip
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: FloppyKernel-XXKSU-NetHunter-ALLINONE
           path: FloppyKernel-XXKSU-NetHunter-ALLINONE.zip
+          if-no-files-found: error

@@ -3,6 +3,17 @@ name: Build FloppyKernel (Pure - Test Build)
 on:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: kernel-build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
 jobs:
   build:
     runs-on: ubuntu-22.04
@@ -11,12 +22,12 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
-          ref: floppy-unity
+          fetch-depth: 1
 
       - name: Setup build environment
         run: |
           sudo apt-get update
-          sudo apt-get install -y git make bc bison flex libssl-dev libelf-dev python3 zip \
+          sudo apt-get install -y git make bc bison flex libssl-dev libelf-dev libncurses-dev python3 zip \
             gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi ccache wget curl cpio
 
       - name: Fix permission scripts
@@ -26,20 +37,28 @@ jobs:
           chmod +x build/lib/*.sh 2>/dev/null || true
 
       - name: Build kernel (pure, tanpa patch apapun)
+        env:
+          LOG_UPLOAD: 0
         run: |
-          export WP=$(realpath $PWD/../)
+          export WP="$(realpath "$PWD/..")"
           # Build standar dengan XXKSU (atau tanpa -x kalau mau vanilla)
           ./build/ckbuild.sh ginkgo -x
 
-      - name: Package AnyKernel3
+      - name: Prepare build artifact
         run: |
-          git clone --depth=1 https://github.com/Flopster101/AnyKernel3 -b floppy-unity AnyKernel3
-          cp out/arch/arm64/boot/Image.gz-dtb AnyKernel3/
-          cd AnyKernel3
-          zip -r9 ../FloppyKernel-Pure.zip . -x '*.git*'
+          shopt -s nullglob
+          archives=(build/Floppy_*.zip)
+          if (( ${#archives[@]} != 1 )); then
+            echo "Expected exactly one kernel ZIP, found ${#archives[@]}"
+            printf '%s\n' "${archives[@]}"
+            exit 1
+          fi
+          mv -- "${archives[0]}" FloppyKernel-Pure.zip
+          zip -T FloppyKernel-Pure.zip
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: FloppyKernel-Pure
           path: FloppyKernel-Pure.zip
+          if-no-files-found: error
