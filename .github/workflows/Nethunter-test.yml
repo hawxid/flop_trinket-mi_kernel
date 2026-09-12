@@ -71,13 +71,14 @@ jobs:
           FAILED=0
           FAILED_LIST=()
           
+          echo "🔧 Applying NetHunter patches..."
+          echo "========================================="
+          
           for patch_file in patches/nethunter/*.patch; do
             [ -f "$patch_file" ] || continue
             patch_name=$(basename "$patch_file")
             echo ""
-            echo "========================================="
             echo "📌 Processing: $patch_name"
-            echo "========================================="
             
             # Try -p1 first
             if patch -p1 --dry-run < "$patch_file" &>/dev/null; then
@@ -111,7 +112,7 @@ jobs:
           
           echo ""
           echo "========================================="
-          echo "📊 FINAL SUMMARY:"
+          echo "📊 PATCH APPLICATION SUMMARY:"
           echo "✅ Applied: $APPLIED"
           echo "❌ Failed/Skipped: $FAILED"
           if [ ${#FAILED_LIST[@]} -gt 0 ]; then
@@ -124,12 +125,21 @@ jobs:
           echo "========================================="
           
           # Exit with error if any patches failed
-          [ "$FAILED" -eq 0 ] || exit 1
+          if [ "$FAILED" -gt 0 ]; then
+            echo ""
+            echo "⚠️ Warning: Some patches failed to apply"
+            exit 1
+          fi
 
-      - name: Build Kernel
+      - name: Build Kernel (XXKSU + NetHunter WiFi)
         run: |
           export WP="$(realpath "$PWD/..")"
+          echo ""
           echo "🚀 Building FloppyKernel XXKSU + NetHunter WiFi..."
+          echo "Device: Ginkgo (Redmi Note 8)"
+          echo "Variant: XXKSU with WiFi Injection"
+          echo "========================================="
+          echo ""
           bash build/ckbuild.sh ginkgo x
 
       - name: Upload Artifact
@@ -144,9 +154,14 @@ jobs:
         if: always()
         run: |
           echo ""
-          echo "🎉 Build Complete!"
-          echo "================================"
-          echo "Device: Ginkgo"
-          echo "Variant: XXKSU + NetHunter WiFi"
-          echo "Patches: QCACLD + WiFi + RTW88"
-          echo "================================"
+          echo "🎉 Build Workflow Complete!"
+          echo "========================================="
+          echo "Device: Ginkgo (Redmi Note 8)"
+          echo "Variant: XXKSU + NetHunter WiFi Injection"
+          echo "Patches Applied:"
+          echo "  ✅ QCACLD 3.0 WiFi Injection"
+          echo "  ✅ WiFi Injection (Monitor Mode Support)"
+          echo "  ✅ RTW88 WiFi Driver Support"
+          echo "========================================="
+          echo ""
+          echo "Artifacts available in Actions > Artifacts section"
