@@ -60,6 +60,7 @@ jobs:
             || echo "⚠️ Failed: add-rtw88-drivers-4.14.patch"
           
           echo ""
+          echo "📋 Downloaded patches:"
           ls -lh patches/nethunter/*.patch 2>/dev/null || echo "No patches"
 
       - name: Apply NetHunter Patches
@@ -67,27 +68,62 @@ jobs:
           cd "$GITHUB_WORKSPACE"
           APPLIED=0
           FAILED=0
+          FAILED_LIST=()
           
           for patch_file in patches/nethunter/*.patch; do
             [ -f "$patch_file" ] || continue
             patch_name=$(basename "$patch_file")
+            echo ""
             echo "📌 Processing: $patch_name"
             
+            # Try -p1 first
             if patch -p1 --dry-run < "$patch_file" &>/dev/null; then
-              patch -p1 < "$patch_file" 2>/dev/null && ((APPLIED++)) || ((FAILED++))
+              if patch -p1 < "$patch_file"; then
+                echo "✅ Applied: $patch_name"
+                ((APPLIED++))
+              else
+                echo "❌ Failed to apply: $patch_name"
+                FAILED_LIST+=("$patch_name")
+                ((FAILED++))
+              fi
+            # Try -p0
             elif patch -p0 --dry-run < "$patch_file" &>/dev/null; then
-              patch -p0 < "$patch_file" 2>/dev/null && ((APPLIED++)) || ((FAILED++))
+              if patch -p0 < "$patch_file"; then
+                echo "✅ Applied (p0): $patch_name"
+                ((APPLIED++))
+              else
+                echo "❌ Failed to apply: $patch_name"
+                FAILED_LIST+=("$patch_name")
+                ((FAILED++))
+              fi
             else
-              echo "⚠️ Skipped: $patch_name"
+              echo "⚠️ Skipped: $patch_name (incompatible with kernel 4.14)"
+              FAILED_LIST+=("$patch_name")
               ((FAILED++))
             fi
           done
           
-          echo "✅ Applied: $APPLIED | ⚠️ Failed: $FAILED"
+          echo ""
+          echo "======================================"
+          echo "📊 Patch Summary:"
+          echo "✅ Applied: $APPLIED"
+          echo "❌ Failed/Skipped: $FAILED"
+          if [ ${#FAILED_LIST[@]} -gt 0 ]; then
+            echo ""
+            echo "Failed patches:"
+            for p in "${FAILED_LIST[@]}"; do
+              echo "  - $p"
+            done
+          fi
+          echo "======================================"
+          
+          # Exit with error if any patches failed
+          [ "$FAILED" -eq 0 ] || exit 1
 
       - name: Build Kernel
         run: |
           export WP="$(realpath "$PWD/..")"
+          echo "🚀 Building FloppyKernel XXKSU + NetHunter WiFi..."
           bash build/ckbuild.sh ginkgo x
 
       - name: Upload Artifact
@@ -97,3 +133,5 @@ jobs:
           path: build/Floppy_*.zip
           if-no-files-found: error
           overwrite: true
+
+      - name: Build Summary
