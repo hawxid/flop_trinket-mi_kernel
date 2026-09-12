@@ -43,6 +43,7 @@ jobs:
           mkdir -p patches/nethunter
           
           echo "📥 Downloading NetHunter patches for kernel 4.14..."
+          echo ""
           
           curl -L -o patches/nethunter/001-add-qcacld-3.0-injection-4.14.patch \
             "https://gitlab.com/kalilinux/nethunter/build-scripts/kali-nethunter-kernel-builder/-/raw/main/patches/4.14/add-qcacld-3.0-injection-4.14.patch" \
@@ -74,48 +75,53 @@ jobs:
             [ -f "$patch_file" ] || continue
             patch_name=$(basename "$patch_file")
             echo ""
+            echo "========================================="
             echo "📌 Processing: $patch_name"
+            echo "========================================="
             
             # Try -p1 first
             if patch -p1 --dry-run < "$patch_file" &>/dev/null; then
+              echo "✅ Dry-run OK with -p1, applying..."
               if patch -p1 < "$patch_file"; then
-                echo "✅ Applied: $patch_name"
+                echo "✅ Successfully Applied: $patch_name"
                 ((APPLIED++))
               else
-                echo "❌ Failed to apply: $patch_name"
-                FAILED_LIST+=("$patch_name")
+                echo "❌ FAILED to apply: $patch_name (with -p1)"
+                FAILED_LIST+=("$patch_name (p1)")
                 ((FAILED++))
               fi
             # Try -p0
             elif patch -p0 --dry-run < "$patch_file" &>/dev/null; then
+              echo "✅ Dry-run OK with -p0, applying..."
               if patch -p0 < "$patch_file"; then
-                echo "✅ Applied (p0): $patch_name"
+                echo "✅ Successfully Applied (p0): $patch_name"
                 ((APPLIED++))
               else
-                echo "❌ Failed to apply: $patch_name"
-                FAILED_LIST+=("$patch_name")
+                echo "❌ FAILED to apply: $patch_name (with -p0)"
+                FAILED_LIST+=("$patch_name (p0)")
                 ((FAILED++))
               fi
             else
-              echo "⚠️ Skipped: $patch_name (incompatible with kernel 4.14)"
-              FAILED_LIST+=("$patch_name")
+              echo "❌ INCOMPATIBLE: $patch_name"
+              echo "   (neither -p1 nor -p0 dry-run passed)"
+              FAILED_LIST+=("$patch_name (incompatible)")
               ((FAILED++))
             fi
           done
           
           echo ""
-          echo "======================================"
-          echo "📊 Patch Summary:"
+          echo "========================================="
+          echo "📊 FINAL SUMMARY:"
           echo "✅ Applied: $APPLIED"
           echo "❌ Failed/Skipped: $FAILED"
           if [ ${#FAILED_LIST[@]} -gt 0 ]; then
             echo ""
             echo "Failed patches:"
             for p in "${FAILED_LIST[@]}"; do
-              echo "  - $p"
+              echo "  ❌ $p"
             done
           fi
-          echo "======================================"
+          echo "========================================="
           
           # Exit with error if any patches failed
           [ "$FAILED" -eq 0 ] || exit 1
@@ -135,3 +141,12 @@ jobs:
           overwrite: true
 
       - name: Build Summary
+        if: always()
+        run: |
+          echo ""
+          echo "🎉 Build Complete!"
+          echo "================================"
+          echo "Device: Ginkgo"
+          echo "Variant: XXKSU + NetHunter WiFi"
+          echo "Patches: QCACLD + WiFi + RTW88"
+          echo "================================"
