@@ -1,0 +1,71 @@
+name: Diagnostic - Patch Compatibility Test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4.2.0
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Download Patches
+        run: |
+          mkdir -p patches/nethunter
+          
+          curl -L -o patches/nethunter/001-add-qcacld-3.0-injection-4.14.patch \
+            "https://gitlab.com/kalilinux/nethunter/build-scripts/kali-nethunter-kernel-builder/-/raw/main/patches/4.14/add-qcacld-3.0-injection-4.14.patch"
+          
+          curl -L -o patches/nethunter/002-add-wifi-injection-4.14.patch \
+            "https://gitlab.com/kalilinux/nethunter/build-scripts/kali-nethunter-kernel-builder/-/raw/main/patches/4.14/add-wifi-injection-4.14.patch"
+          
+          curl -L -o patches/nethunter/003-add-rtw88-drivers-4.14.patch \
+            "https://gitlab.com/kalilinux/nethunter/build-scripts/kali-nethunter-kernel-builder/-/raw/main/patches/4.14/add-rtw88-drivers-4.14.patch"
+          
+          echo "✅ Downloaded all patches"
+          ls -lh patches/nethunter/
+
+      - name: Inspect Patch 001 (QCACLD)
+        run: |
+          echo "=== QCACLD Patch Header ==="
+          head -50 patches/nethunter/001-add-qcacld-3.0-injection-4.14.patch
+          echo ""
+          echo "=== Testing Dry-Run ==="
+          patch -p1 --dry-run < patches/nethunter/001-add-qcacld-3.0-injection-4.14.patch 2>&1 | tail -30
+
+      - name: Inspect Patch 002 (WiFi Injection)
+        run: |
+          echo "=== WiFi Injection Patch Header ==="
+          head -50 patches/nethunter/002-add-wifi-injection-4.14.patch
+          echo ""
+          echo "=== Testing Dry-Run ==="
+          patch -p1 --dry-run < patches/nethunter/002-add-wifi-injection-4.14.patch 2>&1 | tail -30
+
+      - name: Inspect Patch 003 (RTW88)
+        run: |
+          echo "=== RTW88 Patch Header ==="
+          head -50 patches/nethunter/003-add-rtw88-drivers-4.14.patch
+          echo ""
+          echo "=== Testing Dry-Run ==="
+          patch -p1 --dry-run < patches/nethunter/003-add-rtw88-drivers-4.14.patch 2>&1 | tail -30
+
+      - name: Try Apply Patch 001 (VERBOSE)
+        run: |
+          echo "=== Attempting to apply QCACLD patch ==="
+          patch -p1 < patches/nethunter/001-add-qcacld-3.0-injection-4.14.patch 2>&1 | tail -50
+
+      - name: Try Apply Patch 002 (VERBOSE)
+        continue-on-error: true
+        run: |
+          echo "=== Attempting to apply WiFi Injection patch ==="
+          patch -p1 < patches/nethunter/002-add-wifi-injection-4.14.patch 2>&1 | tail -50
+
+      - name: Try Apply Patch 003 (VERBOSE)
+        continue-on-error: true
+        run: |
+          echo "=== Attempting to apply RTW88 patch ==="
+          patch -p1 < patches/nethunter/003-add-rtw88-drivers-4.14.patch 2>&1 | tail -50
