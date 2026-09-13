@@ -2,9 +2,6 @@ name: Build FloppyKernel XXKSU + NetHunter WiFi (Ginkgo)
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - floppy-unity
 
 permissions:
   contents: read
@@ -35,6 +32,56 @@ jobs:
             libncurses-dev python3 zip curl ccache \
             gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
 
+      - name: Fix Script Permissions
+        run: |
+          chmod +x build/ckbuild.sh
+          chmod +x build/scripts/*.sh
+          chmod +x build/lib/*.sh 2>/dev/null || true
+
+      - name: Download NetHunter Patches
+        run: |
+          mkdir -p patches/nethunter
+          BASE="https://gitlab.com/kalilinux/nethunter/build-scripts/kali-nethunter-kernel-builder/-/raw/main/patches/4.14"
+          curl -fL -o patches/nethunter/001-add-qcacld-3.0-injection-4.14.patch "$BASE/add-qcacld-3.0-injection-4.14.patch"
+          curl -fL -o patches/nethunter/002-add-wifi-injection-4.14.patch "$BASE/add-wifi-injection-4.14.patch"
+          curl -fL -o patches/nethunter/003-add-rtw88-drivers-4.14.patch "$BASE/add-rtw88-drivers-4.14.patch"
+          ls -lh patches/nethunter/
+
+      - name: Apply NetHunter Patches
+        run: |
+          for p in patches/nethunter/*.patch; do
+            echo "📌 $p"
+            patch -p1 --dry-run < "$p" && patch -p1 < "$p" || echo "⚠️ failed: $p"
+          done
+
+      - name: Build Kernel (XXKSU + NetHunter)
+        env:
+          LOG_UPLOAD: 0
+        run: |
+          export WP="$(realpath "$PWD/..")"
+          echo "🚀 Building FloppyKernel XXKSU + NetHunter for Ginkgo..."
+          set -o pipefail
+          bash build/ckbuild.sh ginkgo x 2>&1 | tee build.log
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log-failure
+          path: |
+            build.log
+            out/.config
+          if-no-files-found: warn
+          overwrite: true
+
+      - name: Upload Artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FloppyKernel-XXKSU-NetHunter-Ginkgo
+          path: build/Floppy_*.zip
+          if-no-files-found: error
+          overwrite: true
       - name: Cache ccache
         uses: actions/cache@v4
         with:
