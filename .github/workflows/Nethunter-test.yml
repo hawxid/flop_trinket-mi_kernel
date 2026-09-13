@@ -38,7 +38,7 @@ jobs:
           chmod +x build/scripts/*.sh
           chmod +x build/lib/*.sh 2>/dev/null || true
 
-            - name: Download NetHunter Patches
+       - name: Download NetHunter Patches
         run: |
           mkdir -p patches/nethunter
           BASE="https://gitlab.com/kalilinux/nethunter/build-scripts/kali-nethunter-kernel-builder/-/raw/main/patches/4.14"
