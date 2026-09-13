@@ -17,7 +17,7 @@ defaults:
 jobs:
   build:
     runs-on: ubuntu-22.04
-      steps:
+    steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -38,13 +38,12 @@ jobs:
           chmod +x build/scripts/*.sh
           chmod +x build/lib/*.sh 2>/dev/null || true
 
-       - name: Download NetHunter Patches
+      - name: Download NetHunter Patches
         run: |
           mkdir -p patches/nethunter
           BASE="https://gitlab.com/kalilinux/nethunter/build-scripts/kali-nethunter-kernel-builder/-/raw/main/patches/4.14"
           curl -fL -o patches/nethunter/001-add-qcacld-3.0-injection-4.14.patch "$BASE/add-qcacld-3.0-injection-4.14.patch"
           curl -fL -o patches/nethunter/002-add-wifi-injection-4.14.patch "$BASE/add-wifi-injection-4.14.patch"
-          # 003 rtw88 di-skip — gak kompatibel sama branch ini, dan gak dibutuhin buat WiFi internal
           ls -lh patches/nethunter/
 
       - name: Apply NetHunter Patches
